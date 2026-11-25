@@ -1,0 +1,32 @@
+@page "/panel"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISesionService SesionService
+
+@* Dashboard personalizado según el rol (RF-09). *@
+
+<PageTitle>VetCare Web - Mi panel</PageTitle>
+
+<div class="container py-4">
+    @if (sesion is null)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else if (sesion.EsCliente)
+    {
+        <PanelCliente Sesion="sesion" />
+    }
+    else
+    {
+        <PanelPersonal Sesion="sesion" />
+    }
+</div>
+
+@code {
+    private UsuarioSesion? sesion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        sesion = await SesionService.ObtenerAsync();
+    }
+}

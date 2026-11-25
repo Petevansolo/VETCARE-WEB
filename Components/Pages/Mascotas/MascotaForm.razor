@@ -1,0 +1,206 @@
+@page "/mascotas/nueva"
+@page "/mascotas/editar/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = RolesApp.AdminOCliente)]
+@inject IMascotaService MascotaService
+@inject IPropietarioService PropietarioService
+@inject ISesionService SesionService
+@inject NavigationManager Nav
+
+@* Un solo formulario para crear (sin Id) y editar (con Id).
+   El cliente registra mascotas a su nombre; el administrador elige el propietario. *@
+
+<PageTitle>VetCare Web - @(EsEdicion ? "Editar" : "Registrar") Mascota</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-7">
+
+            @if (Bienvenida == "1" && !EsEdicion)
+            {
+                <div class="alert alert-success">
+                    <strong>¡Tu cuenta está lista!</strong> Ahora registra a tu mascota para poder agendarle una cita.
+                </div>
+            }
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    @(EsEdicion ? "Editar Mascota" : "Registrar Nueva Mascota")
+                </div>
+                <div class="card-body p-4">
+
+                    @if (cargando)
+                    {
+                        <p class="text-muted">Cargando...</p>
+                    }
+                    else if (noEncontrada)
+                    {
+                        <div class="alert alert-warning">La mascota no existe o no tienes acceso a ella.</div>
+                        <a href="mascotas" class="btn btn-secondary">Volver</a>
+                    }
+                    else
+                    {
+                        <EditForm Model="mascota" OnValidSubmit="GuardarAsync" FormName="mascotaForm">
+                            <DataAnnotationsValidator />
+
+                            @if (esAdmin)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-secondary">Propietario:</label>
+                                    @if (propietarios.Count == 0)
+                                    {
+                                        <div class="alert alert-info py-2 mb-0">
+                                            No hay propietarios registrados. <a href="propietarios/nuevo">Registra uno primero</a>.
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <InputSelect class="form-select" @bind-Value="mascota.PropietarioId">
+                                            <option value="0">-- Selecciona un propietario --</option>
+                                            @foreach (var p in propietarios)
+                                            {
+                                                <option value="@p.Id">@p.Nombre</option>
+                                            }
+                                        </InputSelect>
+                                        <ValidationMessage For="() => mascota.PropietarioId" />
+                                    }
+                                </div>
+                            }
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Nombre de la Mascota:</label>
+                                <InputText class="form-control" placeholder="Ej. Max, Luna..." @bind-Value="mascota.Nombre" />
+                                <ValidationMessage For="() => mascota.Nombre" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Especie:</label>
+                                    <InputSelect class="form-select" @bind-Value="mascota.Especie">
+                                        <option value="">-- Selecciona --</option>
+                                        @foreach (var especie in especies)
+                                        {
+                                            <option value="@especie.Valor">@especie.Texto</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="() => mascota.Especie" />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Raza:</label>
+                                    <InputText class="form-control" placeholder="Ej. Beagle, Siamés..." @bind-Value="mascota.Raza" />
+                                    <ValidationMessage For="() => mascota.Raza" />
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Fecha de Nacimiento:</label>
+                                    <InputDate class="form-control" @bind-Value="mascota.FechaNacimiento" max="@hoyTexto" />
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Sexo:</label>
+                                    <InputSelect class="form-select" @bind-Value="mascota.Sexo">
+                                        <option value="@SexoMascota.Macho">Macho</option>
+                                        <option value="@SexoMascota.Hembra">Hembra</option>
+                                    </InputSelect>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Peso (kg):</label>
+                                    <InputNumber class="form-control" step="0.01" min="0" @bind-Value="mascota.PesoKg" />
+                                    <ValidationMessage For="() => mascota.PesoKg" />
+                                </div>
+                            </div>
+
+                            @if (error is not null)
+                            {
+                                <div class="alert alert-danger py-2">@error</div>
+                            }
+
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-success fw-bold px-4" disabled="@guardando">
+                                    @(guardando ? "Guardando..." : "Guardar")
+                                </button>
+                                <a href="@(EsEdicion ? $"mascotas/{Id}" : "mascotas")" class="btn btn-outline-secondary">Cancelar</a>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Id de la mascota a editar; null cuando es un registro nuevo.</summary>
+    [Parameter] public int? Id { get; set; }
+
+    /// <summary>?bienvenida=1 cuando el usuario acaba de registrarse.</summary>
+    [SupplyParameterFromQuery(Name = "bienvenida")] public string? Bienvenida { get; set; }
+
+    /// <summary>?propietario=5 para que el administrador registre directo a un propietario.</summary>
+    [SupplyParameterFromQuery(Name = "propietario")] public int? PropietarioQuery { get; set; }
+
+    private bool EsEdicion => Id.HasValue;
+
+    private Mascota mascota = new();
+    private List<(int Id, string Nombre)> propietarios = new();
+    private bool esAdmin;
+    private bool cargando = true;
+    private bool noEncontrada;
+    private bool guardando;
+    private string? error;
+    private readonly string hoyTexto = DateTime.Today.ToString("yyyy-MM-dd");
+
+    // Opciones del prototipo HTML (valor guardado / texto mostrado)
+    private static readonly (string Valor, string Texto)[] especies =
+    {
+        ("Canino", "Canino (Perro)"),
+        ("Felino", "Felino (Gato)"),
+        ("Ave", "Ave"),
+        ("Otro", "Otro / Exótico")
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var sesion = await SesionService.ObtenerAsync();
+        esAdmin = sesion.EsAdmin;
+
+        if (esAdmin)
+            propietarios = await PropietarioService.ObtenerOpcionesAsync();
+
+        if (EsEdicion)
+        {
+            var existente = await MascotaService.ObtenerPorIdAsync(Id!.Value);
+            if (existente is null) noEncontrada = true;
+            else mascota = existente;
+        }
+        else if (sesion.EsCliente)
+        {
+            // El propietario es el propio cliente (también lo fuerza el servicio).
+            mascota.PropietarioId = sesion.PropietarioId ?? 0;
+        }
+        else if (PropietarioQuery is int propietarioId)
+        {
+            mascota.PropietarioId = propietarioId;
+        }
+
+        cargando = false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+        error = null;
+
+        var resultado = EsEdicion
+            ? await MascotaService.ActualizarAsync(mascota)
+            : await MascotaService.CrearAsync(mascota);
+
+        guardando = false;
+
+        if (resultado.Exito)
+            Nav.NavigateTo($"mascotas/{resultado.Id}?aviso={(EsEdicion ? "editada" : "nueva")}");
+        else
+            error = resultado.Mensaje;
+    }
+}

@@ -1,0 +1,15 @@
+@* Etiqueta de color según el estado de la cita (mismos colores que el prototipo). *@
+
+<span class="badge @Clase">@Textos.Estado(Estado)</span>
+
+@code {
+    [Parameter, EditorRequired] public EstadoCita Estado { get; set; }
+
+    private string Clase => Estado switch
+    {
+        EstadoCita.Atendida => "bg-success",
+        EstadoCita.EnAtencion => "bg-warning text-dark",
+        EstadoCita.Cancelada => "bg-danger",
+        _ => "bg-primary"
+    };
+}

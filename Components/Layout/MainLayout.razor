@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+
+@* Estructura general: barra de navegación + contenido + pie de página,
+   tomada de Actividad8.html. Este layout se dibuja en el servidor (estático);
+   cada página decide si es interactiva. *@
+
+<div class="d-flex flex-column min-vh-100">
+    <NavMenu />
+
+    <main class="flex-grow-1">
+        @Body
+    </main>
+
+    @* PIE DE PÁGINA (FOOTER) *@
+    <footer class="bg-dark text-white py-4 mt-5 d-print-none">
+        <div class="container text-center">
+            <p class="fw-bold mb-1">VetCare Web - Sistema Web de Gestión Veterinaria y Expediente Clínico</p>
+            <p class="small text-white-50 mb-2">Desarrollado por: Manuel Alejandro Moreno González (3B) | Equipo de Desarrollo Integrador</p>
+            <p class="small text-white-50 mb-0">Materia: Programación para Web &bull; Septiembre de 2026</p>
+        </div>
+    </footer>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocurrió un error inesperado.
+    <a href="." class="reload">Recargar</a>
+    <span class="dismiss">🗙</span>
+</div>

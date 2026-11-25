@@ -1,0 +1,144 @@
+@* Tabla de citas para el personal (panel y agenda), con las acciones que
+   correspondan a cada rol:
+   - Veterinario: atender / continuar consulta y cancelar SUS citas.
+   - Administrador (recepción): marcar llegada del paciente y cancelar cualquier cita. *@
+@inject ICitaService CitaService
+@inject NavigationManager Nav
+
+@if (error is not null)
+{
+    <div class="alert alert-danger m-3 py-2 small">@error</div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle mb-0">
+        <thead class="table-dark">
+            <tr>
+                <th>Hora</th>
+                <th>Paciente / Especie</th>
+                <th>Propietario</th>
+                @if (MostrarVeterinario)
+                {
+                    <th>Veterinario</th>
+                }
+                <th>Motivo</th>
+                <th>Estado</th>
+                <th class="text-end">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Citas.Count == 0)
+            {
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">@TextoVacio</td>
+                </tr>
+            }
+            @foreach (var c in Citas)
+            {
+                <tr class="@(c.Estado == EstadoCita.Cancelada ? "text-muted" : "")">
+                    <td class="fw-bold text-nowrap">@c.FechaHora.ToString("HH:mm")</td>
+                    <td>
+                        <a href="mascotas/@c.MascotaId" class="fw-bold text-decoration-none">@c.Mascota.Nombre</a><br />
+                        <span class="text-muted small">@Textos.EspecieYRaza(c.Mascota)</span>
+                    </td>
+                    <td>
+                        @c.Mascota.Propietario?.Usuario.Nombre<br />
+                        <span class="text-muted small">@c.Mascota.Propietario?.Telefono</span>
+                    </td>
+                    @if (MostrarVeterinario)
+                    {
+                        <td>@c.Veterinario.Nombre</td>
+                    }
+                    <td class="small">@c.Motivo</td>
+                    <td><EstadoCitaBadge Estado="c.Estado" /></td>
+                    <td class="text-end text-nowrap">
+                        @if (confirmarCancelarId == c.Id)
+                        {
+                            <span class="small me-1">¿Cancelar?</span>
+                            <button class="btn btn-danger btn-sm" disabled="@ocupado" @onclick="() => CambiarAsync(c.Id, EstadoCita.Cancelada)">Sí</button>
+                            <button class="btn btn-secondary btn-sm" @onclick="() => confirmarCancelarId = null">No</button>
+                        }
+                        else
+                        {
+                            if (PuedeAtender(c))
+                            {
+                                <button class="btn btn-success btn-sm" disabled="@ocupado" @onclick="() => AtenderAsync(c)">
+                                    @(c.Estado == EstadoCita.EnAtencion ? "Continuar consulta" : "Atender")
+                                </button>
+                            }
+                            if (Sesion.EsAdmin && c.Estado == EstadoCita.Programada)
+                            {
+                                <button class="btn btn-outline-warning btn-sm" disabled="@ocupado" title="El paciente llegó y pasa a consultorio"
+                                        @onclick="() => CambiarAsync(c.Id, EstadoCita.EnAtencion)">Llegó</button>
+                            }
+                            if (PuedeGestionar(c) && c.Estado == EstadoCita.EnAtencion)
+                            {
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@ocupado" title="Regresar a sala de espera"
+                                        @onclick="() => CambiarAsync(c.Id, EstadoCita.Programada)">En espera</button>
+                            }
+                            if (PuedeGestionar(c) && ReglasCita.EstaActiva(c.Estado))
+                            {
+                                <button class="btn btn-outline-danger btn-sm" @onclick="() => confirmarCancelarId = c.Id">Cancelar</button>
+                            }
+                            if (HistorialId(c) is int historialId)
+                            {
+                                <a href="consultas/@historialId/resumen" class="btn btn-outline-primary btn-sm">Ver consulta</a>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<CitaMedica> Citas { get; set; } = new();
+    [Parameter, EditorRequired] public UsuarioSesion Sesion { get; set; } = UsuarioSesion.Anonimo;
+    [Parameter] public bool MostrarVeterinario { get; set; } = true;
+    [Parameter] public string TextoVacio { get; set; } = "No hay citas para este día.";
+
+    /// <summary>Se invoca después de cambiar un estado para que la página recargue los datos.</summary>
+    [Parameter] public EventCallback OnCambio { get; set; }
+
+    private int? confirmarCancelarId;
+    private string? error;
+    private bool ocupado;
+
+    /// <summary>El veterinario asignado puede atender citas activas de hoy o de días anteriores.</summary>
+    private bool PuedeAtender(CitaMedica c) =>
+        Sesion.EsVet && c.VeterinarioId == Sesion.Id &&
+        ReglasCita.EstaActiva(c.Estado) && c.FechaHora.Date <= DateTime.Today;
+
+    /// <summary>El administrador gestiona todas; el veterinario solo las suyas.</summary>
+    private bool PuedeGestionar(CitaMedica c) =>
+        Sesion.EsAdmin || (Sesion.EsVet && c.VeterinarioId == Sesion.Id);
+
+    private static int? HistorialId(CitaMedica c) => c.Historiales.FirstOrDefault()?.Id;
+
+    private async Task AtenderAsync(CitaMedica c)
+    {
+        if (c.Estado == EstadoCita.Programada)
+        {
+            ocupado = true;
+            var resultado = await CitaService.CambiarEstadoAsync(c.Id, EstadoCita.EnAtencion);
+            ocupado = false;
+            if (!resultado.Exito)
+            {
+                error = resultado.Mensaje;
+                return;
+            }
+        }
+        Nav.NavigateTo($"agenda/consulta/{c.Id}");
+    }
+
+    private async Task CambiarAsync(int citaId, EstadoCita nuevoEstado)
+    {
+        ocupado = true;
+        var resultado = await CitaService.CambiarEstadoAsync(citaId, nuevoEstado);
+        ocupado = false;
+        confirmarCancelarId = null;
+        error = resultado.Exito ? null : resultado.Mensaje;
+        await OnCambio.InvokeAsync();
+    }
+}

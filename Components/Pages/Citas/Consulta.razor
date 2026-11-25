@@ -1,0 +1,169 @@
+@page "/agenda/consulta/{CitaId:int}"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = RolesApp.Vet)]
+@inject ICitaService CitaService
+@inject NavigationManager Nav
+
+@* Atención de la consulta (RF-06): el veterinario asignado captura peso,
+   síntomas, diagnóstico, tratamiento e indicaciones. Al guardar, la cita
+   queda "Atendida" y el registro pasa al expediente de la mascota. *@
+
+<PageTitle>VetCare Web - Consulta</PageTitle>
+
+<div class="container py-4">
+    @if (cargando)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else if (cita is null)
+    {
+        <div class="alert alert-warning">La cita no existe o no está asignada a ti.</div>
+        <a href="agenda" class="btn btn-secondary">Volver a la agenda</a>
+    }
+    else if (!ReglasCita.EstaActiva(cita.Estado))
+    {
+        <div class="alert alert-info">
+            Esta cita está <strong>@Textos.Estado(cita.Estado)</strong>; ya no se puede registrar una consulta.
+        </div>
+        <a href="mascotas/@cita.MascotaId" class="btn btn-primary">Ver expediente</a>
+        <a href="agenda" class="btn btn-outline-secondary">Volver a la agenda</a>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h1 class="h3 fw-bold text-primary mb-0">Consulta: @cita.Mascota.Nombre</h1>
+            <a href="agenda" class="btn btn-outline-secondary">Volver a la agenda</a>
+        </div>
+
+        <div class="row g-4">
+            @* DATOS DEL PACIENTE *@
+            <div class="col-12 col-lg-4">
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 text-primary">Paciente</div>
+                    <div class="card-body small">
+                        <p class="mb-1"><strong>@cita.Mascota.Nombre</strong> · @Textos.EspecieYRaza(cita.Mascota)</p>
+                        <p class="mb-1">@cita.Mascota.Sexo · @Textos.Edad(cita.Mascota.FechaNacimiento) · @Textos.Peso(cita.Mascota.PesoKg)</p>
+                        <hr />
+                        <p class="mb-1"><strong>Propietario:</strong> @cita.Mascota.Propietario?.Usuario.Nombre</p>
+                        <p class="mb-1"><strong>Teléfono:</strong> @cita.Mascota.Propietario?.Telefono</p>
+                        <p class="mb-1"><strong>Emergencia:</strong> @(cita.Mascota.Propietario?.ContactoEmergencia ?? "-")</p>
+                        <hr />
+                        <p class="mb-1"><strong>Cita:</strong> @Textos.Fecha(cita.FechaHora) · @cita.FechaHora.ToString("HH:mm")</p>
+                        <p class="mb-0"><strong>Motivo:</strong> @cita.Motivo</p>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold py-3 text-primary d-flex justify-content-between">
+                        <span>Antecedentes</span>
+                        <a href="mascotas/@cita.MascotaId" target="_blank" class="small">Expediente completo</a>
+                    </div>
+                    <ul class="list-group list-group-flush small">
+                        @if (cita.Mascota.Historiales.Count == 0)
+                        {
+                            <li class="list-group-item text-muted">Primera consulta registrada.</li>
+                        }
+                        @foreach (var h in cita.Mascota.Historiales.OrderByDescending(x => x.FechaAtencion).Take(3))
+                        {
+                            <li class="list-group-item">
+                                <strong>@Textos.Fecha(h.FechaAtencion)</strong>: @h.Diagnostico
+                            </li>
+                        }
+                        @foreach (var v in cita.Mascota.Vacunaciones.Where(x => x.FechaProximaDosis is not null && x.FechaProximaDosis < hoy))
+                        {
+                            <li class="list-group-item text-danger">
+                                Dosis vencida: @v.Nombre (@(v.FechaProximaDosis is DateOnly f ? Textos.Fecha(f) : ""))
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+
+            @* FORMULARIO DE CONSULTA *@
+            <div class="col-12 col-lg-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-primary text-white fw-bold py-3">Registro de la consulta</div>
+                    <div class="card-body p-4">
+                        <EditForm Model="form" OnValidSubmit="GuardarAsync" FormName="consultaForm">
+                            <DataAnnotationsValidator />
+
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Peso actual (kg):</label>
+                                    <InputNumber class="form-control" step="0.01" min="0" @bind-Value="form.PesoKg" />
+                                    <ValidationMessage For="() => form.PesoKg" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Síntomas:</label>
+                                <InputTextArea class="form-control" rows="2" @bind-Value="form.Sintomas" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Diagnóstico:</label>
+                                <InputTextArea class="form-control" rows="2" @bind-Value="form.Diagnostico" />
+                                <ValidationMessage For="() => form.Diagnostico" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Tratamiento prescrito:</label>
+                                <InputTextArea class="form-control" rows="3" @bind-Value="form.Tratamiento"
+                                               placeholder="Medicamento, dosis, frecuencia y duración..." />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Indicaciones médicas:</label>
+                                <InputTextArea class="form-control" rows="3" @bind-Value="form.Indicaciones"
+                                               placeholder="Cuidados en casa, dieta, próxima revisión..." />
+                            </div>
+
+                            @if (error is not null)
+                            {
+                                <div class="alert alert-danger py-2">@error</div>
+                            }
+
+                            <button type="submit" class="btn btn-success fw-bold px-4" disabled="@guardando">
+                                @(guardando ? "Guardando..." : "Guardar y finalizar consulta")
+                            </button>
+                            <p class="small text-muted mt-2 mb-0">
+                                Para registrar vacunas aplicadas en esta visita, usa el carnet en el expediente completo.
+                            </p>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int CitaId { get; set; }
+
+    private CitaMedica? cita;
+    private ConsultaFormModel form = new();
+    private readonly DateOnly hoy = DateOnly.FromDateTime(DateTime.Today);
+    private bool cargando = true;
+    private bool guardando;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cita = await CitaService.ObtenerParaConsultaAsync(CitaId);
+        form = new ConsultaFormModel { CitaId = CitaId, PesoKg = cita?.Mascota.PesoKg };
+        cargando = false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+        error = null;
+        var resultado = await CitaService.RegistrarConsultaAsync(form);
+        guardando = false;
+
+        if (resultado.Exito)
+            Nav.NavigateTo($"mascotas/{resultado.Id}?aviso=consulta");
+        else
+            error = resultado.Mensaje;
+    }
+}

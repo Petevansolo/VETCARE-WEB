@@ -1,0 +1,241 @@
+@page "/citas/nueva"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ICitaService CitaService
+@inject ISesionService SesionService
+@inject NavigationManager Nav
+
+@* Agendamiento de citas (RF-04) con horarios disponibles en tiempo real.
+   Cliente: solo sus mascotas. Personal (recepción): cualquier mascota. *@
+
+<PageTitle>VetCare Web - Agendar cita</PageTitle>
+
+<div class="container py-4">
+    <h1 class="h3 fw-bold text-primary mb-4">Agendar cita</h1>
+
+    @if (cargando)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else if (mascotas.Count == 0)
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 text-center">
+                @if (sesion?.EsCliente == true)
+                {
+                    <p class="mb-3">Para agendar una cita primero registra a tu mascota.</p>
+                    <a href="mascotas/nueva" class="btn btn-primary fw-bold">Registrar mi mascota</a>
+                }
+                else
+                {
+                    <p class="mb-3">No hay mascotas registradas en el sistema.</p>
+                    <a href="mascotas" class="btn btn-primary">Ir a mascotas</a>
+                }
+            </div>
+        </div>
+    }
+    else if (veterinarios.Count == 0)
+    {
+        <div class="alert alert-warning">
+            En este momento no hay veterinarios disponibles en la agenda. Comunícate con la clínica.
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-12 col-lg-8">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-primary text-white fw-bold py-3">Datos de la cita</div>
+                    <div class="card-body p-4">
+                        <EditForm EditContext="editContext" OnValidSubmit="GuardarAsync" FormName="nuevaCita">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Mascota:</label>
+                                <InputSelect class="form-select" @bind-Value="form.MascotaId">
+                                    <option value="0">-- Selecciona una mascota --</option>
+                                    @foreach (var m in mascotas)
+                                    {
+                                        <option value="@m.Id">@TextoMascota(m)</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="() => form.MascotaId" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-7 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Veterinario de preferencia:</label>
+                                    <InputSelect class="form-select" @bind-Value="form.VeterinarioId" @bind-Value:after="CargarHorariosAsync">
+                                        <option value="0">-- Selecciona un veterinario --</option>
+                                        @foreach (var v in veterinarios)
+                                        {
+                                            <option value="@v.Id">@v.Nombre</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="() => form.VeterinarioId" />
+                                </div>
+                                <div class="col-md-5 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Fecha de la cita:</label>
+                                    <InputDate class="form-control" @bind-Value="form.Fecha" @bind-Value:after="CargarHorariosAsync"
+                                               min="@hoy.ToString("yyyy-MM-dd")" max="@hoy.AddDays(HorarioClinica.DiasMaximosAnticipacion).ToString("yyyy-MM-dd")" />
+                                    <ValidationMessage For="() => form.Fecha" />
+                                </div>
+                            </div>
+
+                            @* HORARIOS DISPONIBLES *@
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Horario disponible:</label>
+                                @if (form.VeterinarioId == 0 || form.Fecha is null)
+                                {
+                                    <p class="text-muted small mb-0">Selecciona veterinario y fecha para ver los horarios libres.</p>
+                                }
+                                else if (!HorarioClinica.AbreElDia(form.Fecha.Value))
+                                {
+                                    <p class="text-danger small mb-0">La clínica no atiende en domingo. Elige otro día.</p>
+                                }
+                                else if (cargandoHorarios)
+                                {
+                                    <p class="text-muted small mb-0">Buscando horarios...</p>
+                                }
+                                else if (horarios.Count == 0)
+                                {
+                                    <p class="text-danger small mb-0">No hay horarios libres ese día con este veterinario. Prueba otra fecha u otro veterinario.</p>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var h in horarios)
+                                        {
+                                            <button type="button"
+                                                    class="btn btn-sm bloque-horario @(form.Hora == h ? "btn-primary" : "btn-outline-primary")"
+                                                    @onclick="() => ElegirHora(h)">
+                                                @h.ToString("HH:mm")
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                <ValidationMessage For="() => form.Hora" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Motivo de consulta:</label>
+                                <InputTextArea class="form-control" rows="3" @bind-Value="form.Motivo"
+                                               placeholder="Describa brevemente los síntomas o razón de consulta..." />
+                                <ValidationMessage For="() => form.Motivo" />
+                            </div>
+
+                            @if (error is not null)
+                            {
+                                <div class="alert alert-danger py-2">@error</div>
+                            }
+
+                            <button type="submit" class="btn btn-success w-100 fw-bold py-2" disabled="@guardando">
+                                @(guardando ? "Guardando..." : "Confirmar Agendamiento")
+                            </button>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4 small">
+                        <h2 class="h6 fw-bold text-primary">Antes de agendar</h2>
+                        <ul class="ps-3 mb-0">
+                            <li>Horario de atención: @HorarioClinica.Descripcion</li>
+                            <li>Puedes agendar con hasta @HorarioClinica.DiasMaximosAnticipacion días de anticipación.</li>
+                            <li>Solo se muestran los horarios libres del veterinario elegido.</li>
+                            <li>Puedes cancelar tu cita desde <strong>Mis citas</strong> mientras esté programada.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>?mascota=5 preselecciona la mascota (desde el expediente o la lista).</summary>
+    [SupplyParameterFromQuery(Name = "mascota")] public int? MascotaQuery { get; set; }
+
+    private UsuarioSesion? sesion;
+    private List<Mascota> mascotas = new();
+    private List<Usuario> veterinarios = new();
+    private List<TimeOnly> horarios = new();
+
+    private CitaFormModel form = new();
+    private EditContext editContext = default!;
+
+    private readonly DateOnly hoy = DateOnly.FromDateTime(DateTime.Today);
+    private bool cargando = true;
+    private bool cargandoHorarios;
+    private bool guardando;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        editContext = new EditContext(form);
+
+        sesion = await SesionService.ObtenerAsync();
+        mascotas = await CitaService.ObtenerMascotasSeleccionablesAsync();
+        veterinarios = await CitaService.ObtenerVeterinariosAsync();
+
+        if (MascotaQuery is int id && mascotas.Any(m => m.Id == id))
+            form.MascotaId = id;
+        else if (mascotas.Count == 1)
+            form.MascotaId = mascotas[0].Id;
+
+        if (veterinarios.Count == 1)
+        {
+            form.VeterinarioId = veterinarios[0].Id;
+            await CargarHorariosAsync();
+        }
+
+        cargando = false;
+    }
+
+    private string TextoMascota(Mascota m) =>
+        sesion?.EsCliente == true
+            ? $"{m.Nombre} ({m.Especie})"
+            : $"{m.Nombre} ({m.Especie}) - {m.Propietario?.Usuario.Nombre}";
+
+    /// <summary>Se ejecuta al cambiar veterinario o fecha: consulta los bloques libres.</summary>
+    private async Task CargarHorariosAsync()
+    {
+        form.Hora = null;   // el horario elegido antes ya no aplica
+        horarios = new();
+
+        if (form.VeterinarioId == 0 || form.Fecha is null)
+            return;
+
+        cargandoHorarios = true;
+        horarios = await CitaService.ObtenerHorariosDisponiblesAsync(form.VeterinarioId, form.Fecha.Value);
+        cargandoHorarios = false;
+    }
+
+    private void ElegirHora(TimeOnly hora)
+    {
+        form.Hora = hora;
+        editContext.NotifyFieldChanged(FieldIdentifier.Create(() => form.Hora));
+    }
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+        error = null;
+        var resultado = await CitaService.SolicitarAsync(form);
+        guardando = false;
+
+        if (!resultado.Exito)
+        {
+            error = resultado.Mensaje;
+            await CargarHorariosAsync();   // refresca por si el horario se ocupó
+            return;
+        }
+
+        if (sesion?.EsCliente == true)
+            Nav.NavigateTo("citas?agendada=1");
+        else
+            Nav.NavigateTo($"agenda?fecha={form.Fecha?.ToString("yyyy-MM-dd")}");
+    }
+}

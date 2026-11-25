@@ -1,0 +1,58 @@
+@* Panel del personal: indicadores y citas de hoy.
+   Veterinario → sus citas; Administrador → todas las de la clínica. *@
+@inject IDashboardService DashboardService
+@inject ICitaService CitaService
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h3 fw-bold text-primary mb-1">Hola, @Sesion.Nombre</h1>
+        <p class="text-muted mb-0">
+            @(Sesion.EsVet ? "Tu agenda de hoy" : "Panel de control de la clínica") · @Textos.FechaLarga(DateOnly.FromDateTime(DateTime.Today))
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="agenda" class="btn btn-outline-primary">Ver agenda</a>
+        <a href="citas/nueva" class="btn btn-success fw-bold">+ Nueva cita</a>
+        @if (Sesion.EsAdmin)
+        {
+            <a href="propietarios/nuevo" class="btn btn-outline-secondary">+ Propietario</a>
+            <a href="admin/personal" class="btn btn-outline-secondary">Personal</a>
+        }
+    </div>
+</div>
+
+<DashboardMetricas Metricas="metricas" EsVeterinario="Sesion.EsVet" />
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+        <span class="text-primary fs-5">@(Sesion.EsVet ? "Mis citas de hoy" : "Citas programadas de hoy")</span>
+        <span class="badge bg-primary">Hoy</span>
+    </div>
+    <div class="card-body p-0">
+        @if (citasHoy is null)
+        {
+            <p class="text-muted text-center py-4 mb-0">Cargando...</p>
+        }
+        else
+        {
+            <TablaCitas Citas="citasHoy" Sesion="Sesion" MostrarVeterinario="Sesion.EsAdmin"
+                        TextoVacio="No hay citas para hoy." OnCambio="CargarAsync" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public UsuarioSesion Sesion { get; set; } = UsuarioSesion.Anonimo;
+
+    private MetricasDashboard? metricas;
+    private List<CitaMedica>? citasHoy;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        metricas = await DashboardService.ObtenerMetricasAsync();
+        var hoy = DateOnly.FromDateTime(DateTime.Today);
+        citasHoy = await CitaService.ObtenerAgendaAsync(hoy, Sesion.EsVet ? Sesion.Id : null);
+    }
+}

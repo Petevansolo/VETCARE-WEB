@@ -1,0 +1,145 @@
+@* Panel del cliente: sus mascotas, próximas citas y recordatorios de vacunas. *@
+@inject IMascotaService MascotaService
+@inject ICitaService CitaService
+@inject IExpedienteService ExpedienteService
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h3 fw-bold text-primary mb-1">Hola, @Sesion.Nombre</h1>
+        <p class="text-muted mb-0">Este es el resumen de tus mascotas y tus citas.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="mascotas/nueva" class="btn btn-outline-primary">+ Registrar mascota</a>
+        @if (mascotas.Count > 0)
+        {
+            <a href="citas/nueva" class="btn btn-success fw-bold">Agendar cita</a>
+        }
+    </div>
+</div>
+
+@if (cargando)
+{
+    <p class="text-muted">Cargando...</p>
+}
+else
+{
+    @* ---- Primeros pasos: se muestra mientras no haya mascotas ---- *@
+    if (mascotas.Count == 0)
+    {
+        <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold">¡Bienvenido a VetCare Web!</h2>
+                <p class="text-muted">Para poder agendar una cita, primero registra a tu mascota.</p>
+                <ol class="mb-3">
+                    <li class="text-success">Crear tu cuenta ✔</li>
+                    <li>Registrar a tu mascota</li>
+                    <li>Agendar tu primera cita</li>
+                </ol>
+                <a href="mascotas/nueva" class="btn btn-primary fw-bold">Registrar mi primera mascota</a>
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+        @* PRÓXIMAS CITAS *@
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span class="text-primary fs-5">Próximas citas</span>
+                    <a href="citas" class="btn btn-outline-primary btn-sm">Ver todas</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (proximas.Count == 0)
+                    {
+                        <p class="text-muted text-center py-4 mb-0">No tienes citas próximas.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group list-group-flush">
+                            @foreach (var c in proximas)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <strong>@Textos.Fecha(c.FechaHora) · @c.FechaHora.ToString("HH:mm")</strong><br />
+                                        <span class="small">@c.Mascota.Nombre con @c.Veterinario.Nombre</span><br />
+                                        <span class="small text-muted">@c.Motivo</span>
+                                    </div>
+                                    <EstadoCitaBadge Estado="c.Estado" />
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-5 d-flex flex-column gap-4">
+            @* MIS MASCOTAS *@
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span class="text-primary fs-5">Mis mascotas</span>
+                    <a href="mascotas" class="btn btn-outline-primary btn-sm">Administrar</a>
+                </div>
+                <ul class="list-group list-group-flush">
+                    @if (mascotas.Count == 0)
+                    {
+                        <li class="list-group-item text-muted">Aún no registras mascotas.</li>
+                    }
+                    @foreach (var m in mascotas)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <a href="mascotas/@m.Id" class="fw-bold text-decoration-none">@m.Nombre</a><br />
+                                <span class="small text-muted">@Textos.EspecieYRaza(m) · @Textos.Edad(m.FechaNacimiento)</span>
+                            </div>
+                            <a href="citas/nueva?mascota=@m.Id" class="btn btn-outline-success btn-sm">Agendar</a>
+                        </li>
+                    }
+                </ul>
+            </div>
+
+            @* RECORDATORIOS DE VACUNACIÓN *@
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-bold py-3 text-primary fs-5">Recordatorios de vacunación</div>
+                <ul class="list-group list-group-flush">
+                    @if (recordatorios.Count == 0)
+                    {
+                        <li class="list-group-item text-muted">No hay dosis pendientes en los próximos 30 días.</li>
+                    }
+                    @foreach (var v in recordatorios)
+                    {
+                        var vencida = v.FechaProximaDosis < hoy;
+                        <li class="list-group-item">
+                            <span class="badge @(vencida ? "bg-danger" : "bg-warning text-dark") me-1">@(vencida ? "Vencida" : "Próxima")</span>
+                            <strong>@v.Mascota.Nombre</strong>: @v.Nombre<br />
+                            <span class="small text-muted">@Textos.Tipo(v.Tipo) · próxima dosis @(v.FechaProximaDosis is DateOnly f ? Textos.Fecha(f) : "")</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public UsuarioSesion Sesion { get; set; } = UsuarioSesion.Anonimo;
+
+    private bool cargando = true;
+    private List<Mascota> mascotas = new();
+    private List<CitaMedica> proximas = new();
+    private List<Vacunacion> recordatorios = new();
+    private readonly DateOnly hoy = DateOnly.FromDateTime(DateTime.Today);
+
+    protected override async Task OnInitializedAsync()
+    {
+        mascotas = await MascotaService.ObtenerTodasAsync();
+        var citas = await CitaService.ObtenerMisCitasAsync();
+        proximas = citas
+            .Where(c => ReglasCita.EstaActiva(c.Estado) && c.FechaHora >= DateTime.Today)
+            .OrderBy(c => c.FechaHora)
+            .Take(5)
+            .ToList();
+        recordatorios = await ExpedienteService.ObtenerRecordatoriosAsync();
+        cargando = false;
+    }
+}

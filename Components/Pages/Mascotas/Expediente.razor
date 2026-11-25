@@ -1,0 +1,315 @@
+@page "/mascotas/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IExpedienteService ExpedienteService
+@inject ISesionService SesionService
+
+@* Expediente clínico electrónico (RF-06) y carnet digital de vacunación (RF-07).
+   Cliente: solo lectura de sus mascotas. Veterinario: registra vacunas.
+   Administrador: consulta y corrige registros. *@
+
+<PageTitle>VetCare Web - Expediente @(mascota?.Nombre)</PageTitle>
+
+<div class="container py-4">
+
+    @if (cargando)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else if (mascota is null || sesion is null)
+    {
+        <div class="alert alert-warning">La mascota no existe o no tienes acceso a su expediente.</div>
+        <a href="mascotas" class="btn btn-secondary">Volver</a>
+    }
+    else
+    {
+        @* ---------- Avisos después de guardar ---------- *@
+        if (Aviso == "nueva")
+        {
+            <div class="alert alert-success d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span><strong>@mascota.Nombre</strong> quedó registrada. ¿Quieres agendarle una cita?</span>
+                <a href="citas/nueva?mascota=@mascota.Id" class="btn btn-success btn-sm fw-bold">Agendar cita</a>
+            </div>
+        }
+        else if (Aviso == "editada")
+        {
+            <div class="alert alert-success">Los datos de @mascota.Nombre se actualizaron.</div>
+        }
+        else if (Aviso == "consulta")
+        {
+            <div class="alert alert-success">Consulta registrada y cita marcada como atendida.</div>
+        }
+
+        @* ---------- Datos del paciente ---------- *@
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h1 class="h3 fw-bold text-primary mb-1">@mascota.Nombre</h1>
+                        <p class="text-muted mb-2">@Textos.EspecieYRaza(mascota) · @mascota.Sexo · @Textos.Edad(mascota.FechaNacimiento)</p>
+                        <div class="d-flex flex-wrap gap-3 small">
+                            <span><strong>Peso actual:</strong> @Textos.Peso(mascota.PesoKg)</span>
+                            <span><strong>Nacimiento:</strong> @(mascota.FechaNacimiento is DateOnly n ? Textos.Fecha(n) : "-")</span>
+                            @if (sesion.EsPersonal && mascota.Propietario is not null)
+                            {
+                                <span><strong>Propietario:</strong> @mascota.Propietario.Usuario.Nombre · @mascota.Propietario.Telefono</span>
+                                <span><strong>Emergencia:</strong> @(mascota.Propietario.ContactoEmergencia ?? "-")</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        @if (sesion.EsAdmin || sesion.EsCliente)
+                        {
+                            <a href="citas/nueva?mascota=@mascota.Id" class="btn btn-success fw-bold">Agendar cita</a>
+                            <a href="mascotas/editar/@mascota.Id" class="btn btn-outline-secondary">Editar datos</a>
+                        }
+                        <a href="mascotas" class="btn btn-outline-primary">Volver</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            @* HISTORIAL CLÍNICO (RF-06) *@
+            <div class="col-12 col-lg-7">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-primary text-white fw-bold py-3">Historial clínico</div>
+                    <div class="card-body">
+                        @if (mascota.Historiales.Count == 0)
+                        {
+                            <p class="text-muted mb-0">Aún no hay consultas registradas.</p>
+                        }
+                        @foreach (var h in mascota.Historiales.OrderByDescending(x => x.FechaAtencion))
+                        {
+                            <div class="border rounded-3 p-3 mb-3">
+                                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                                    <div>
+                                        <strong>@Textos.Fecha(h.FechaAtencion)</strong>
+                                        <span class="text-muted small">· @h.Cita.Veterinario.Nombre · Motivo: @h.Cita.Motivo</span>
+                                    </div>
+                                    <a href="consultas/@h.Id/resumen" class="btn btn-outline-primary btn-sm">Ver / imprimir</a>
+                                </div>
+                                <p class="mb-1"><strong>Diagnóstico:</strong> @h.Diagnostico</p>
+                                @if (!string.IsNullOrWhiteSpace(h.Sintomas))
+                                {
+                                    <p class="mb-1 small"><strong>Síntomas:</strong> @h.Sintomas</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(h.Tratamiento))
+                                {
+                                    <p class="mb-1 small"><strong>Tratamiento:</strong> @h.Tratamiento</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(h.Indicaciones))
+                                {
+                                    <p class="mb-1 small"><strong>Indicaciones:</strong> @h.Indicaciones</p>
+                                }
+                                @if (h.PesoKg is not null)
+                                {
+                                    <p class="mb-0 small text-muted">Peso en consulta: @Textos.Peso(h.PesoKg)</p>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* CARNET DE VACUNACIÓN (RF-07) *@
+            <div class="col-12 col-lg-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                        <span class="text-primary">Carnet de vacunación</span>
+                        @if (sesion.EsVet && !mostrarFormVacuna)
+                        {
+                            <button class="btn btn-success btn-sm" @onclick="AbrirFormVacuna">+ Registrar</button>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @if (mostrarFormVacuna)
+                        {
+                            <EditForm Model="vacuna" OnValidSubmit="GuardarVacunaAsync" FormName="vacunaForm" class="border rounded-3 p-3 mb-3 bg-light">
+                                <DataAnnotationsValidator />
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label small fw-bold">Tipo:</label>
+                                        <InputSelect class="form-select form-select-sm" @bind-Value="vacuna.Tipo">
+                                            <option value="@TipoVacunacion.Vacuna">Vacuna</option>
+                                            <option value="@TipoVacunacion.Desparasitacion">Desparasitación</option>
+                                        </InputSelect>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small fw-bold">Lote:</label>
+                                        <InputText class="form-control form-control-sm" @bind-Value="vacuna.Lote" />
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold">Nombre / producto:</label>
+                                        <InputText class="form-control form-control-sm" @bind-Value="vacuna.Nombre" />
+                                        <ValidationMessage For="() => vacuna.Nombre" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small fw-bold">Aplicación:</label>
+                                        <InputDate class="form-control form-control-sm" @bind-Value="vacuna.FechaAplicacion" max="@hoy.ToString("yyyy-MM-dd")" />
+                                        <ValidationMessage For="() => vacuna.FechaAplicacion" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small fw-bold">Próxima dosis:</label>
+                                        <InputDate class="form-control form-control-sm" @bind-Value="vacuna.FechaProximaDosis" />
+                                    </div>
+                                </div>
+                                @if (errorVacuna is not null)
+                                {
+                                    <div class="alert alert-danger py-1 small mt-2 mb-0">@errorVacuna</div>
+                                }
+                                <div class="d-flex gap-2 mt-3">
+                                    <button type="submit" class="btn btn-success btn-sm fw-bold">Guardar</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => mostrarFormVacuna = false">Cancelar</button>
+                                </div>
+                            </EditForm>
+                        }
+
+                        @if (mascota.Vacunaciones.Count == 0)
+                        {
+                            <p class="text-muted mb-0">Sin vacunas ni desparasitaciones registradas.</p>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Aplicación</th>
+                                            <th>Producto</th>
+                                            <th>Próxima</th>
+                                            @if (sesion.EsPersonal)
+                                            {
+                                                <th></th>
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var v in mascota.Vacunaciones.OrderByDescending(x => x.FechaAplicacion))
+                                        {
+                                            <tr>
+                                                <td class="small text-nowrap">@Textos.Fecha(v.FechaAplicacion)</td>
+                                                <td>
+                                                    <span class="badge @(v.Tipo == TipoVacunacion.Vacuna ? "bg-info" : "bg-secondary")">@Textos.Tipo(v.Tipo)</span><br />
+                                                    <span class="small">@v.Nombre</span>
+                                                    @if (!string.IsNullOrWhiteSpace(v.Lote))
+                                                    {
+                                                        <span class="small text-muted"> · Lote @v.Lote</span>
+                                                    }
+                                                </td>
+                                                <td class="small text-nowrap">
+                                                    @if (v.FechaProximaDosis is DateOnly proxima)
+                                                    {
+                                                        <span class="@(proxima < hoy ? "text-danger fw-bold" : proxima <= hoy.AddDays(30) ? "text-warning fw-bold" : "")">@Textos.Fecha(proxima)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </td>
+                                                @if (sesion.EsPersonal)
+                                                {
+                                                    <td class="text-end">
+                                                        <button class="btn btn-link btn-sm text-danger p-0" title="Eliminar registro"
+                                                                @onclick="() => EliminarVacunaAsync(v.Id)">✕</button>
+                                                    </td>
+                                                }
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ---------- Citas ---------- *@
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-white fw-bold py-3 text-primary">Citas</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Fecha y hora</th>
+                                <th>Veterinario</th>
+                                <th>Motivo</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (mascota.Citas.Count == 0)
+                            {
+                                <tr><td colspan="4" class="text-center text-muted py-3">Sin citas registradas.</td></tr>
+                            }
+                            @foreach (var c in mascota.Citas.OrderByDescending(x => x.FechaHora))
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@Textos.Fecha(c.FechaHora) · @c.FechaHora.ToString("HH:mm")</td>
+                                    <td>@c.Veterinario.Nombre</td>
+                                    <td class="small">@c.Motivo</td>
+                                    <td><EstadoCitaBadge Estado="c.Estado" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    /// <summary>?aviso=nueva|editada|consulta para mostrar confirmaciones.</summary>
+    [SupplyParameterFromQuery(Name = "aviso")] public string? Aviso { get; set; }
+
+    private UsuarioSesion? sesion;
+    private Mascota? mascota;
+    private bool cargando = true;
+
+    private bool mostrarFormVacuna;
+    private VacunacionFormModel vacuna = new();
+    private string? errorVacuna;
+    private readonly DateOnly hoy = DateOnly.FromDateTime(DateTime.Today);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        sesion = await SesionService.ObtenerAsync();
+        await CargarAsync();
+        cargando = false;
+    }
+
+    private async Task CargarAsync()
+    {
+        mascota = await ExpedienteService.ObtenerExpedienteAsync(Id);
+    }
+
+    private void AbrirFormVacuna()
+    {
+        vacuna = new VacunacionFormModel { MascotaId = Id };
+        errorVacuna = null;
+        mostrarFormVacuna = true;
+    }
+
+    private async Task GuardarVacunaAsync()
+    {
+        var resultado = await ExpedienteService.RegistrarVacunacionAsync(vacuna);
+        if (!resultado.Exito)
+        {
+            errorVacuna = resultado.Mensaje;
+            return;
+        }
+        mostrarFormVacuna = false;
+        await CargarAsync();
+    }
+
+    private async Task EliminarVacunaAsync(int vacunacionId)
+    {
+        await ExpedienteService.EliminarVacunacionAsync(vacunacionId);
+        await CargarAsync();
+    }
+}

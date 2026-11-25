@@ -1,0 +1,159 @@
+@page "/mi-perfil"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ICuentaService CuentaService
+@inject NavigationManager Nav
+
+@* Cada usuario edita sus propios datos (RF-02) y cambia su contraseña. *@
+
+<PageTitle>VetCare Web - Mi perfil</PageTitle>
+
+<div class="container py-4">
+    <h1 class="h3 fw-bold text-primary mb-4">Mi perfil</h1>
+
+    @if (Guardado == "1")
+    {
+        <div class="alert alert-success">Tus datos se guardaron correctamente.</div>
+    }
+
+    @if (perfil is null)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else
+    {
+        <div class="row g-4">
+            @* DATOS PERSONALES *@
+            <div class="col-12 col-lg-7">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-primary text-white fw-bold py-3">Datos personales</div>
+                    <div class="card-body p-4">
+                        <EditForm Model="perfil" OnValidSubmit="GuardarPerfilAsync" FormName="perfil">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Nombre completo:</label>
+                                <InputText class="form-control" @bind-Value="perfil.Nombre" />
+                                <ValidationMessage For="() => perfil.Nombre" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Correo (usuario de acceso):</label>
+                                <input class="form-control" value="@perfil.Email" disabled />
+                            </div>
+
+                            @if (perfil.EsCliente)
+                            {
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-bold text-secondary">Teléfono:</label>
+                                        <InputText type="tel" class="form-control" @bind-Value="perfil.Telefono" />
+                                        <ValidationMessage For="() => perfil.Telefono" />
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-bold text-secondary">Contacto de emergencia:</label>
+                                        <InputText class="form-control" @bind-Value="perfil.ContactoEmergencia" />
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-secondary">Dirección:</label>
+                                    <InputTextArea class="form-control" rows="2" @bind-Value="perfil.Direccion" />
+                                </div>
+                            }
+
+                            @if (errorPerfil is not null)
+                            {
+                                <div class="alert alert-danger py-2">@errorPerfil</div>
+                            }
+
+                            <button type="submit" class="btn btn-success fw-bold px-4" disabled="@guardando">
+                                @(guardando ? "Guardando..." : "Guardar cambios")
+                            </button>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            @* CONTRASEÑA *@
+            <div class="col-12 col-lg-5">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white fw-bold py-3 text-primary">Cambiar contraseña</div>
+                    <div class="card-body p-4">
+                        <EditForm Model="password" OnValidSubmit="CambiarPasswordAsync" FormName="password">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Contraseña actual:</label>
+                                <InputText type="password" class="form-control" @bind-Value="password.PasswordActual" autocomplete="current-password" />
+                                <ValidationMessage For="() => password.PasswordActual" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Nueva contraseña:</label>
+                                <InputText type="password" class="form-control" @bind-Value="password.PasswordNueva" autocomplete="new-password" />
+                                <ValidationMessage For="() => password.PasswordNueva" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Confirmar nueva contraseña:</label>
+                                <InputText type="password" class="form-control" @bind-Value="password.Confirmacion" autocomplete="new-password" />
+                                <ValidationMessage For="() => password.Confirmacion" />
+                            </div>
+
+                            @if (mensajePassword is not null)
+                            {
+                                <div class="alert @(passwordOk ? "alert-success" : "alert-danger") py-2">@mensajePassword</div>
+                            }
+
+                            <button type="submit" class="btn btn-outline-primary fw-bold px-4" disabled="@guardando">Cambiar contraseña</button>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "guardado")] public string? Guardado { get; set; }
+
+    private PerfilModel? perfil;
+    private CambioPasswordModel password = new();
+    private string? errorPerfil;
+    private string? mensajePassword;
+    private bool passwordOk;
+    private bool guardando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        perfil = await CuentaService.ObtenerMiPerfilAsync();
+    }
+
+    private async Task GuardarPerfilAsync()
+    {
+        if (perfil is null) return;
+        guardando = true;
+        var resultado = await CuentaService.ActualizarMiPerfilAsync(perfil);
+        guardando = false;
+
+        if (!resultado.Exito)
+        {
+            errorPerfil = resultado.Mensaje;
+            return;
+        }
+
+        // Renueva la cookie para que el nombre nuevo aparezca en la barra de navegación.
+        var regreso = Uri.EscapeDataString("/mi-perfil?guardado=1");
+        Nav.NavigateTo($"cuenta/refrescar-sesion?returnUrl={regreso}", forceLoad: true);
+    }
+
+    private async Task CambiarPasswordAsync()
+    {
+        guardando = true;
+        var resultado = await CuentaService.CambiarPasswordAsync(password);
+        guardando = false;
+
+        passwordOk = resultado.Exito;
+        mensajePassword = resultado.Exito ? "Contraseña actualizada." : resultado.Mensaje;
+        if (resultado.Exito)
+            password = new CambioPasswordModel();
+    }
+}

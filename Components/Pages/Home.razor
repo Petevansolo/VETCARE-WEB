@@ -1,0 +1,47 @@
+@page "/"
+
+@* Página pública (estática). El panel con datos está en /panel y requiere sesión. *@
+
+<PageTitle>VetCare Web - Inicio</PageTitle>
+
+<HeroSection />
+
+<div class="container">
+
+    @* CÓMO FUNCIONA (flujo del cliente) *@
+    <section class="mb-5">
+        <h2 class="h4 fw-bold text-secondary mb-3">¿Cómo funciona?</h2>
+        <div class="row g-3">
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <span class="badge bg-primary rounded-pill mb-2">Paso 1</span>
+                        <h3 class="h5 fw-bold">Crea tu cuenta</h3>
+                        <p class="text-muted mb-0">Regístrate con tu correo y tus datos de contacto. Solo toma un minuto.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <span class="badge bg-primary rounded-pill mb-2">Paso 2</span>
+                        <h3 class="h5 fw-bold">Registra a tus mascotas</h3>
+                        <p class="text-muted mb-0">Agrega nombre, especie, raza, fecha de nacimiento, sexo y peso de cada una.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <span class="badge bg-primary rounded-pill mb-2">Paso 3</span>
+                        <h3 class="h5 fw-bold">Agenda tu cita</h3>
+                        <p class="text-muted mb-0">Elige veterinario, día y uno de los horarios libres. Consulta después el expediente y el carnet de vacunación.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <ModulosSistema />
+
+</div>

@@ -1,0 +1,22 @@
+@* Se muestra cuando una página requiere permisos que el usuario no tiene:
+   sin sesión → página de inicio de sesión; con sesión → acceso denegado. *@
+@inject NavigationManager Nav
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? EstadoAutenticacion { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var estado = EstadoAutenticacion is null ? null : await EstadoAutenticacion;
+
+        if (estado?.User.Identity?.IsAuthenticated == true)
+        {
+            Nav.NavigateTo("cuenta/acceso-denegado", forceLoad: true);
+        }
+        else
+        {
+            var actual = "/" + Nav.ToBaseRelativePath(Nav.Uri);
+            Nav.NavigateTo($"cuenta/login?ReturnUrl={Uri.EscapeDataString(actual)}", forceLoad: true);
+        }
+    }
+}

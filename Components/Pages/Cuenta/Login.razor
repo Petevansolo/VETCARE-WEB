@@ -1,0 +1,102 @@
+@page "/cuenta/login"
+@* Página ESTÁTICA (sin @rendermode): el formulario se envía con un POST normal
+   para que el servidor pueda escribir la cookie de sesión. *@
+@using VETCARE_WEB.Data
+@inject ICuentaService CuentaService
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Entorno
+
+<PageTitle>VetCare Web - Iniciar sesión</PageTitle>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    Iniciar Sesión
+                </div>
+                <div class="card-body p-4">
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-2">@error</div>
+                    }
+
+                    <EditForm Model="Input" method="post" OnValidSubmit="IniciarSesionAsync" FormName="login">
+                        <DataAnnotationsValidator />
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-bold text-secondary">Correo electrónico:</label>
+                            <InputText id="email" type="email" class="form-control" @bind-Value="Input.Email" autocomplete="username" />
+                            <ValidationMessage For="() => Input.Email" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label fw-bold text-secondary">Contraseña:</label>
+                            <InputText id="password" type="password" class="form-control" @bind-Value="Input.Password" autocomplete="current-password" />
+                            <ValidationMessage For="() => Input.Password" />
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <InputCheckbox id="recordarme" class="form-check-input" @bind-Value="Input.Recordarme" />
+                            <label class="form-check-label" for="recordarme">Mantener la sesión iniciada</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 fw-bold py-2">Entrar</button>
+                    </EditForm>
+
+                    <p class="text-center small mt-3 mb-0">
+                        ¿Aún no tienes cuenta? <a href="cuenta/registro">Regístrate aquí</a>
+                    </p>
+                </div>
+            </div>
+
+            @if (Entorno.IsDevelopment())
+            {
+                @* Ayuda solo en desarrollo: cuentas creadas por DbInitializer. *@
+                <div class="card border-0 shadow-sm mt-3">
+                    <div class="card-body small">
+                        <p class="fw-bold mb-2">Cuentas de prueba (solo en desarrollo)</p>
+                        <ul class="mb-0 ps-3">
+                            <li><strong>Administrador:</strong> admin@vetcare.mx / Admin123*</li>
+                            <li><strong>Veterinario:</strong> carlos.ruiz@vetcare.mx / @DbInitializer.PasswordVeterinariosDemo</li>
+                            <li><strong>Cliente:</strong> roberto.gomez@example.com / @DbInitializer.PasswordClientesDemo</li>
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private LoginModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private string? error;
+
+    protected override void OnInitialized()
+    {
+        // Si ya tiene sesión y solo abrió la página, lo mandamos a su panel.
+        if (HttpMethods.IsGet(HttpContext.Request.Method) && HttpContext.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo(Destino());
+    }
+
+    private async Task IniciarSesionAsync()
+    {
+        var usuario = await CuentaService.ValidarCredencialesAsync(Input.Email, Input.Password);
+        if (usuario is null)
+        {
+            error = "Correo o contraseña incorrectos, o la cuenta está desactivada.";
+            return;
+        }
+
+        await SesionCookie.IniciarAsync(HttpContext, usuario, Input.Recordarme);
+        Nav.NavigateTo(Destino());
+    }
+
+    /// <summary>Vuelve a la página que pidió el login, o al panel.</summary>
+    private string Destino() => SesionCookie.EsUrlLocal(ReturnUrl) ? ReturnUrl! : "/panel";
+}

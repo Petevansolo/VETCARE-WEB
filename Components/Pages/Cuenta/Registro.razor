@@ -1,0 +1,114 @@
+@page "/cuenta/registro"
+@* Registro público de clientes (RF-01). Página ESTÁTICA: al terminar, el
+   servidor escribe la cookie y el usuario queda con la sesión iniciada. *@
+@inject ICuentaService CuentaService
+@inject NavigationManager Nav
+
+<PageTitle>VetCare Web - Crear cuenta</PageTitle>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    Crear cuenta de cliente
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-muted">
+                        Con tu cuenta podrás registrar a tus mascotas, agendar citas y consultar su expediente y carnet de vacunación.
+                    </p>
+
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-2">@error</div>
+                    }
+
+                    <EditForm Model="Input" method="post" OnValidSubmit="RegistrarAsync" FormName="registro">
+                        <DataAnnotationsValidator />
+
+                        <h2 class="h6 text-uppercase text-muted mb-3">Datos de acceso</h2>
+
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label fw-bold text-secondary">Nombre completo:</label>
+                            <InputText id="nombre" class="form-control" @bind-Value="Input.Nombre" autocomplete="name" />
+                            <ValidationMessage For="() => Input.Nombre" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-bold text-secondary">Correo electrónico:</label>
+                            <InputText id="email" type="email" class="form-control" @bind-Value="Input.Email" autocomplete="email" />
+                            <ValidationMessage For="() => Input.Email" />
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="password" class="form-label fw-bold text-secondary">Contraseña:</label>
+                                <InputText id="password" type="password" class="form-control" @bind-Value="Input.Password" autocomplete="new-password" />
+                                <ValidationMessage For="() => Input.Password" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="confirmar" class="form-label fw-bold text-secondary">Confirmar contraseña:</label>
+                                <InputText id="confirmar" type="password" class="form-control" @bind-Value="Input.ConfirmarPassword" autocomplete="new-password" />
+                                <ValidationMessage For="() => Input.ConfirmarPassword" />
+                            </div>
+                        </div>
+
+                        <h2 class="h6 text-uppercase text-muted mt-2 mb-3">Datos de contacto</h2>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="telefono" class="form-label fw-bold text-secondary">Teléfono:</label>
+                                <InputText id="telefono" type="tel" class="form-control" placeholder="Ej. 312 123 4567" @bind-Value="Input.Telefono" autocomplete="tel" />
+                                <ValidationMessage For="() => Input.Telefono" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="contacto" class="form-label fw-bold text-secondary">Contacto de emergencia:</label>
+                                <InputText id="contacto" class="form-control" placeholder="Nombre y teléfono" @bind-Value="Input.ContactoEmergencia" />
+                                <ValidationMessage For="() => Input.ContactoEmergencia" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="direccion" class="form-label fw-bold text-secondary">Dirección:</label>
+                            <InputTextArea id="direccion" class="form-control" rows="2" @bind-Value="Input.Direccion" />
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 fw-bold py-2">Crear mi cuenta</button>
+                    </EditForm>
+
+                    <p class="text-center small mt-3 mb-0">
+                        ¿Ya tienes cuenta? <a href="cuenta/login">Inicia sesión</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private RegistroModel Input { get; set; } = new();
+
+    private string? error;
+
+    protected override void OnInitialized()
+    {
+        if (HttpMethods.IsGet(HttpContext.Request.Method) && HttpContext.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo("/panel");
+    }
+
+    private async Task RegistrarAsync()
+    {
+        var (resultado, usuario) = await CuentaService.RegistrarClienteAsync(Input);
+        if (!resultado.Exito || usuario is null)
+        {
+            error = resultado.Mensaje;
+            return;
+        }
+
+        // Inicia sesión automáticamente y lleva al usuario a registrar su primera mascota.
+        await SesionCookie.IniciarAsync(HttpContext, usuario, recordar: false);
+        Nav.NavigateTo("/mascotas/nueva?bienvenida=1");
+    }
+}

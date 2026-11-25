@@ -1,0 +1,82 @@
+@* Barra de navegación principal (sección 1 de Actividad8.html).
+   Muestra solo las opciones del rol que inició sesión. *@
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm d-print-none">
+    <div class="container">
+        <a class="navbar-brand fw-bold fs-4" href="">VetCare Web</a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menuPrincipal"
+                aria-controls="menuPrincipal" aria-expanded="false" aria-label="Mostrar menú">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="menuPrincipal">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <AuthorizeView>
+                    <Authorized>
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="panel">Mi panel</NavLink>
+                        </li>
+                    </Authorized>
+                    <NotAuthorized>
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Inicio</NavLink>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/#servicios">Servicios</a>
+                        </li>
+                    </NotAuthorized>
+                </AuthorizeView>
+
+                @* ---- Cliente / propietario ---- *@
+                <AuthorizeView Roles="@RolesApp.Cliente">
+                    <li class="nav-item"><NavLink class="nav-link" href="mascotas">Mis mascotas</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="citas" Match="NavLinkMatch.All">Mis citas</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="citas/nueva">Agendar cita</NavLink></li>
+                </AuthorizeView>
+
+                @* ---- Veterinario ---- *@
+                <AuthorizeView Roles="@RolesApp.Vet">
+                    <li class="nav-item"><NavLink class="nav-link" href="agenda">Mi agenda</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="mascotas">Pacientes</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="propietarios">Propietarios</NavLink></li>
+                </AuthorizeView>
+
+                @* ---- Administrador ---- *@
+                <AuthorizeView Roles="@RolesApp.Admin">
+                    <li class="nav-item"><NavLink class="nav-link" href="agenda">Agenda</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="mascotas">Mascotas</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="propietarios">Propietarios</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="admin/personal">Personal</NavLink></li>
+                </AuthorizeView>
+            </ul>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <NavLink class="nav-link text-white small px-0 me-2" href="mi-perfil" title="Mi perfil">
+                            @context.User.Identity?.Name
+                            <span class="badge bg-light text-primary ms-1">@RolVisible(context.User)</span>
+                        </NavLink>
+                        <form method="post" action="cuenta/logout" class="d-inline">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="returnUrl" value="/" />
+                            <button type="submit" class="btn btn-outline-light btn-sm">Cerrar sesión</button>
+                        </form>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="d-flex gap-2">
+                        <a href="cuenta/login" class="btn btn-outline-light btn-sm">Iniciar sesión</a>
+                        <a href="cuenta/registro" class="btn btn-light btn-sm fw-bold">Crear cuenta</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </div>
+</nav>
+
+@code {
+    private static string RolVisible(ClaimsPrincipal usuario) =>
+        Enum.TryParse<RolUsuario>(usuario.FindFirstValue(ClaimTypes.Role), out var rol) ? Textos.Rol(rol) : string.Empty;
+}

@@ -1,0 +1,91 @@
+@page "/consultas/{Id:int}/resumen"
+@attribute [Authorize]
+@inject IExpedienteService ExpedienteService
+
+@* Resumen de consulta / receta imprimible (RF-10). Página estática:
+   el botón usa window.print() del navegador. El menú y el pie de página
+   tienen la clase d-print-none, así que no salen en la impresión. *@
+
+<PageTitle>VetCare Web - Resumen de consulta</PageTitle>
+
+<div class="container py-4">
+    @if (consulta is null)
+    {
+        <div class="alert alert-warning">La consulta no existe o no tienes acceso a ella.</div>
+        <a href="panel" class="btn btn-secondary">Volver</a>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+            <a href="mascotas/@consulta.MascotaId" class="btn btn-outline-primary">← Volver al expediente</a>
+            <button type="button" class="btn btn-primary fw-bold" onclick="window.print()">Imprimir</button>
+        </div>
+
+        <div class="card border-0 shadow-sm hoja-impresion">
+            <div class="card-body p-4 p-md-5">
+                <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+                    <div>
+                        <h1 class="h4 fw-bold text-primary mb-0">VetCare Web</h1>
+                        <p class="text-muted small mb-0">Clínica Veterinaria Central</p>
+                    </div>
+                    <div class="text-end">
+                        <p class="fw-bold mb-0">Resumen de consulta / Receta</p>
+                        <p class="small text-muted mb-0">Folio #@consulta.Id.ToString("D6")</p>
+                        <p class="small text-muted mb-0">@Textos.Fecha(consulta.FechaAtencion) · @consulta.FechaAtencion.ToString("HH:mm")</p>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-sm-6 mb-3">
+                        <h2 class="h6 text-uppercase text-muted">Paciente</h2>
+                        <p class="mb-0 fw-bold">@consulta.Mascota.Nombre</p>
+                        <p class="mb-0 small">@Textos.EspecieYRaza(consulta.Mascota) · @consulta.Mascota.Sexo · @Textos.Edad(consulta.Mascota.FechaNacimiento)</p>
+                        <p class="mb-0 small">Peso en consulta: @Textos.Peso(consulta.PesoKg ?? consulta.Mascota.PesoKg)</p>
+                    </div>
+                    <div class="col-sm-6 mb-3">
+                        <h2 class="h6 text-uppercase text-muted">Propietario</h2>
+                        <p class="mb-0 fw-bold">@consulta.Mascota.Propietario?.Usuario.Nombre</p>
+                        <p class="mb-0 small">@consulta.Mascota.Propietario?.Telefono</p>
+                    </div>
+                </div>
+
+                <dl class="row">
+                    <dt class="col-sm-3">Motivo</dt>
+                    <dd class="col-sm-9">@(consulta.Cita.Motivo ?? "-")</dd>
+
+                    <dt class="col-sm-3">Síntomas</dt>
+                    <dd class="col-sm-9">@(consulta.Sintomas ?? "-")</dd>
+
+                    <dt class="col-sm-3">Diagnóstico</dt>
+                    <dd class="col-sm-9">@(consulta.Diagnostico ?? "-")</dd>
+
+                    <dt class="col-sm-3">Tratamiento</dt>
+                    <dd class="col-sm-9" style="white-space: pre-line">@(consulta.Tratamiento ?? "-")</dd>
+
+                    <dt class="col-sm-3">Indicaciones</dt>
+                    <dd class="col-sm-9" style="white-space: pre-line">@(consulta.Indicaciones ?? "-")</dd>
+                </dl>
+
+                <div class="row mt-5 pt-4">
+                    <div class="col-sm-6 offset-sm-6 text-center">
+                        <div class="border-top pt-2">
+                            <p class="mb-0 fw-bold">@consulta.Cita.Veterinario.Nombre</p>
+                            <p class="small text-muted mb-0">Médico veterinario</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private HistorialClinico? consulta;
+
+    protected override async Task OnInitializedAsync()
+    {
+        consulta = await ExpedienteService.ObtenerConsultaAsync(Id);
+    }
+}

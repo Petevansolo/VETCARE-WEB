@@ -1,0 +1,56 @@
+@* Panel de control general (RF-09). Los números vienen de la base de datos. *@
+
+<section class="mb-4">
+    @if (Metricas is null)
+    {
+        <p class="text-muted">Cargando indicadores...</p>
+    }
+    else
+    {
+        <div class="row g-3">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 shadow-sm bg-primary text-white h-100">
+                    <div class="card-body p-3">
+                        <h6 class="card-title text-uppercase text-white-50 small mb-1">@(EsVeterinario ? "Mis citas de hoy" : "Citas del día")</h6>
+                        <h2 class="display-6 fw-bold mb-0">@Metricas.CitasDelDia</h2>
+                        <span class="small">@Metricas.CitasPendientes pendientes de atención</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 shadow-sm bg-warning text-dark h-100">
+                    <div class="card-body p-3">
+                        <h6 class="card-title text-uppercase small mb-1 opacity-75">En Consultorio</h6>
+                        <h2 class="display-6 fw-bold mb-0">@Metricas.EnConsultorio</h2>
+                        <span class="small">Atención médica activa</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 shadow-sm bg-success text-white h-100">
+                    <div class="card-body p-3">
+                        <h6 class="card-title text-uppercase text-white-50 small mb-1">Mascotas Registradas</h6>
+                        <h2 class="display-6 fw-bold mb-0">@Metricas.MascotasRegistradas</h2>
+                        <span class="small">De @Metricas.Propietarios propietarios</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 shadow-sm bg-info text-white h-100">
+                    <div class="card-body p-3">
+                        <h6 class="card-title text-uppercase text-white-50 small mb-1">Veterinarios</h6>
+                        <h2 class="display-6 fw-bold mb-0">@Metricas.VeterinariosActivos</h2>
+                        <span class="small">Activos en agenda</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public MetricasDashboard? Metricas { get; set; }
+
+    /// <summary>Cambia el texto de la primera tarjeta para el veterinario.</summary>
+    [Parameter] public bool EsVeterinario { get; set; }
+}

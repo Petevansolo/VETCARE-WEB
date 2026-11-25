@@ -1,0 +1,107 @@
+@page "/agenda"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = RolesApp.Personal)]
+@inject ICitaService CitaService
+@inject ISesionService SesionService
+
+@* Agenda diaria (RF-05). Veterinario: ve por defecto sus citas y atiende las suyas.
+   Administrador: ve la agenda de todos y controla los estados. *@
+
+<PageTitle>VetCare Web - Agenda</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1 class="h3 fw-bold text-primary mb-0">@(sesion?.EsVet == true ? "Mi agenda" : "Agenda de la clínica")</h1>
+        <a href="citas/nueva" class="btn btn-success fw-bold">+ Nueva cita</a>
+    </div>
+
+    @* FILTROS *@
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body d-flex flex-wrap align-items-end gap-3">
+            <div>
+                <label class="form-label small fw-bold text-secondary mb-1">Día:</label>
+                <div class="input-group">
+                    <button class="btn btn-outline-primary" title="Día anterior" @onclick="() => CambiarDiaAsync(-1)">‹</button>
+                    <input type="date" class="form-control" @bind="fecha" @bind:format="yyyy-MM-dd" @bind:after="CargarAsync" />
+                    <button class="btn btn-outline-primary" title="Día siguiente" @onclick="() => CambiarDiaAsync(1)">›</button>
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-outline-secondary" @onclick="IrAHoyAsync">Hoy</button>
+            </div>
+            <div>
+                <label class="form-label small fw-bold text-secondary mb-1">Veterinario:</label>
+                <select class="form-select" @bind="veterinarioFiltro" @bind:after="CargarAsync">
+                    <option value="">Todos</option>
+                    @foreach (var v in veterinarios)
+                    {
+                        <option value="@v.Id">@TextoVeterinario(v)</option>
+                    }
+                </select>
+            </div>
+            <div class="ms-auto text-muted small">
+                @Textos.FechaLarga(fecha) · @(citas?.Count(c => c.Estado != EstadoCita.Cancelada) ?? 0) citas activas
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            @if (citas is null || sesion is null)
+            {
+                <p class="text-muted text-center py-4 mb-0">Cargando...</p>
+            }
+            else
+            {
+                <TablaCitas Citas="citas" Sesion="sesion" MostrarVeterinario="veterinarioFiltro is null"
+                            TextoVacio="@(HorarioClinica.AbreElDia(fecha) ? "No hay citas para este día." : "Domingo: la clínica no atiende.")"
+                            OnCambio="CargarAsync" />
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>?fecha=2026-11-21 para abrir un día concreto (p. ej. tras agendar).</summary>
+    [SupplyParameterFromQuery(Name = "fecha")] public string? FechaQuery { get; set; }
+
+    private UsuarioSesion? sesion;
+    private List<Usuario> veterinarios = new();
+    private List<CitaMedica>? citas;
+    private DateOnly fecha = DateOnly.FromDateTime(DateTime.Today);
+    private int? veterinarioFiltro;
+
+    protected override async Task OnInitializedAsync()
+    {
+        sesion = await SesionService.ObtenerAsync();
+        veterinarios = await CitaService.ObtenerVeterinariosAsync();
+
+        if (DateOnly.TryParseExact(FechaQuery, "yyyy-MM-dd", out var f))
+            fecha = f;
+
+        // El veterinario ve primero sus propias citas.
+        if (sesion.EsVet)
+            veterinarioFiltro = sesion.Id;
+
+        await CargarAsync();
+    }
+
+    private string TextoVeterinario(Usuario v) => v.Id == sesion?.Id ? $"{v.Nombre} (yo)" : v.Nombre;
+
+    private async Task CargarAsync()
+    {
+        citas = await CitaService.ObtenerAgendaAsync(fecha, veterinarioFiltro);
+    }
+
+    private async Task CambiarDiaAsync(int dias)
+    {
+        fecha = fecha.AddDays(dias);
+        await CargarAsync();
+    }
+
+    private async Task IrAHoyAsync()
+    {
+        fecha = DateOnly.FromDateTime(DateTime.Today);
+        await CargarAsync();
+    }
+}

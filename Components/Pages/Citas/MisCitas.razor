@@ -1,0 +1,168 @@
+@page "/citas"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = RolesApp.Cliente)]
+@inject ICitaService CitaService
+
+@* Citas del cliente: próximas (con opción de cancelar) e historial. *@
+
+<PageTitle>VetCare Web - Mis citas</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1 class="h3 fw-bold text-primary mb-0">Mis citas</h1>
+        <a href="citas/nueva" class="btn btn-success fw-bold">+ Agendar cita</a>
+    </div>
+
+    @if (Agendada == "1")
+    {
+        <div class="alert alert-success">¡Listo! Tu cita quedó agendada. Te esperamos.</div>
+    }
+    @if (mensaje is not null)
+    {
+        <div class="alert @(exito ? "alert-success" : "alert-danger")">@mensaje</div>
+    }
+
+    @if (citas is null)
+    {
+        <p class="text-muted">Cargando...</p>
+    }
+    else
+    {
+        @* PRÓXIMAS *@
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-primary text-white fw-bold py-3">Próximas citas</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Hora</th>
+                                <th>Mascota</th>
+                                <th>Veterinario</th>
+                                <th>Motivo</th>
+                                <th>Estado</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Proximas.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        No tienes citas próximas. <a href="citas/nueva">Agenda una</a>.
+                                    </td>
+                                </tr>
+                            }
+                            @foreach (var c in Proximas)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@Textos.Fecha(c.FechaHora)</td>
+                                    <td class="fw-bold">@c.FechaHora.ToString("HH:mm")</td>
+                                    <td><a href="mascotas/@c.MascotaId" class="text-decoration-none">@c.Mascota.Nombre</a></td>
+                                    <td>@c.Veterinario.Nombre</td>
+                                    <td class="small">@c.Motivo</td>
+                                    <td><EstadoCitaBadge Estado="c.Estado" /></td>
+                                    <td class="text-end text-nowrap">
+                                        @if (c.Estado == EstadoCita.Programada && c.FechaHora > DateTime.Now)
+                                        {
+                                            if (confirmarId == c.Id)
+                                            {
+                                                <span class="small me-1">¿Cancelar la cita?</span>
+                                                <button class="btn btn-danger btn-sm" @onclick="() => CancelarAsync(c.Id)">Sí</button>
+                                                <button class="btn btn-secondary btn-sm" @onclick="() => confirmarId = null">No</button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => confirmarId = c.Id">Cancelar</button>
+                                            }
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        @* HISTORIAL *@
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white fw-bold py-3 text-primary">Historial de citas</div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Mascota</th>
+                                <th>Veterinario</th>
+                                <th>Motivo</th>
+                                <th>Estado</th>
+                                <th class="text-end"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Pasadas.Count == 0)
+                            {
+                                <tr><td colspan="6" class="text-center text-muted py-4">Aún no hay citas en tu historial.</td></tr>
+                            }
+                            @foreach (var c in Pasadas)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@Textos.Fecha(c.FechaHora) · @c.FechaHora.ToString("HH:mm")</td>
+                                    <td>@c.Mascota.Nombre</td>
+                                    <td>@c.Veterinario.Nombre</td>
+                                    <td class="small">@c.Motivo</td>
+                                    <td><EstadoCitaBadge Estado="c.Estado" /></td>
+                                    <td class="text-end">
+                                        @if (c.Historiales.FirstOrDefault() is HistorialClinico h)
+                                        {
+                                            <a href="consultas/@h.Id/resumen" class="btn btn-outline-primary btn-sm">Ver consulta</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "agendada")] public string? Agendada { get; set; }
+
+    private List<CitaMedica>? citas;
+    private int? confirmarId;
+    private string? mensaje;
+    private bool exito;
+
+    /// <summary>Activas de hoy en adelante, de la más cercana a la más lejana.</summary>
+    private List<CitaMedica> Proximas => (citas ?? new())
+        .Where(c => ReglasCita.EstaActiva(c.Estado) && c.FechaHora >= DateTime.Today)
+        .OrderBy(c => c.FechaHora)
+        .ToList();
+
+    /// <summary>Todo lo demás: atendidas, canceladas o vencidas.</summary>
+    private List<CitaMedica> Pasadas => (citas ?? new())
+        .Where(c => !(ReglasCita.EstaActiva(c.Estado) && c.FechaHora >= DateTime.Today))
+        .ToList();
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        citas = await CitaService.ObtenerMisCitasAsync();
+    }
+
+    private async Task CancelarAsync(int citaId)
+    {
+        var resultado = await CitaService.CancelarAsync(citaId);
+        exito = resultado.Exito;
+        mensaje = resultado.Exito ? "La cita se canceló." : resultado.Mensaje;
+        confirmarId = null;
+        await CargarAsync();
+    }
+}

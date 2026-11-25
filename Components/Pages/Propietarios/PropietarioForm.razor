@@ -1,0 +1,140 @@
+@page "/propietarios/nuevo"
+@page "/propietarios/editar/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = RolesApp.Admin)]
+@inject IPropietarioService PropietarioService
+@inject NavigationManager Nav
+
+@* Alta/edición de propietarios por el administrador (recepción), p. ej. para
+   clientes que llegan sin cuenta. Crea la cuenta (rol cliente) y su perfil. *@
+
+<PageTitle>VetCare Web - @(EsEdicion ? "Editar" : "Registrar") Propietario</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    @(EsEdicion ? "Editar Propietario" : "Registrar Nuevo Propietario")
+                </div>
+                <div class="card-body p-4">
+
+                    @if (cargando)
+                    {
+                        <p class="text-muted">Cargando...</p>
+                    }
+                    else if (noEncontrado)
+                    {
+                        <div class="alert alert-warning">El propietario no existe.</div>
+                        <a href="propietarios" class="btn btn-secondary">Volver</a>
+                    }
+                    else
+                    {
+                        <EditForm Model="form" OnValidSubmit="GuardarAsync" FormName="propietarioForm">
+                            <DataAnnotationsValidator />
+
+                            <h2 class="h6 text-uppercase text-muted mb-3">Datos de la cuenta</h2>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Nombre completo:</label>
+                                <InputText class="form-control" placeholder="Ej. Roberto Gómez" @bind-Value="form.Nombre" />
+                                <ValidationMessage For="() => form.Nombre" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Correo electrónico:</label>
+                                    <InputText type="email" class="form-control" placeholder="correo@ejemplo.com" @bind-Value="form.Email" />
+                                    <ValidationMessage For="() => form.Email" />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Contraseña:</label>
+                                    <InputText type="password" class="form-control" @bind-Value="form.Password" autocomplete="new-password"
+                                               placeholder="@(EsEdicion ? "Dejar vacía para no cambiarla" : "Mínimo 6 caracteres")" />
+                                    <ValidationMessage For="() => form.Password" />
+                                </div>
+                            </div>
+                            @if (!EsEdicion)
+                            {
+                                <p class="small text-muted mt-n2">Entrega esta contraseña al cliente; podrá cambiarla en "Mi perfil".</p>
+                            }
+
+                            <h2 class="h6 text-uppercase text-muted mt-2 mb-3">Datos de contacto</h2>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Teléfono:</label>
+                                    <InputText type="tel" class="form-control" placeholder="Ej. 312 123 4567" @bind-Value="form.Telefono" />
+                                    <ValidationMessage For="() => form.Telefono" />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold text-secondary">Contacto de emergencia:</label>
+                                    <InputText class="form-control" placeholder="Nombre y teléfono" @bind-Value="form.ContactoEmergencia" />
+                                    <ValidationMessage For="() => form.ContactoEmergencia" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-secondary">Dirección:</label>
+                                <InputTextArea class="form-control" rows="2" @bind-Value="form.Direccion" />
+                            </div>
+
+                            @if (error is not null)
+                            {
+                                <div class="alert alert-danger py-2">@error</div>
+                            }
+
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-success fw-bold px-4" disabled="@guardando">
+                                    @(guardando ? "Guardando..." : "Guardar")
+                                </button>
+                                <a href="propietarios" class="btn btn-outline-secondary">Cancelar</a>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Id del propietario a editar; null cuando es un registro nuevo.</summary>
+    [Parameter] public int? Id { get; set; }
+
+    private bool EsEdicion => Id.HasValue;
+
+    private PropietarioFormModel form = new();
+    private bool cargando = true;
+    private bool noEncontrado;
+    private bool guardando;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (EsEdicion)
+        {
+            var existente = await PropietarioService.ObtenerFormularioAsync(Id!.Value);
+            if (existente is null) noEncontrado = true;
+            else form = existente;
+        }
+        cargando = false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+        error = null;
+
+        var resultado = EsEdicion
+            ? await PropietarioService.ActualizarAsync(form)
+            : await PropietarioService.CrearAsync(form);
+
+        guardando = false;
+
+        if (resultado.Exito)
+            Nav.NavigateTo("propietarios");
+        else
+            error = resultado.Mensaje;
+    }
+}
